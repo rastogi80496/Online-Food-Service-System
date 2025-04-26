@@ -9,30 +9,52 @@ let checkout = document.querySelector('.checkOut');
 let listProducts = [];
 let carts = [];
 
-checkout.addEventListener('click',async () => {
+checkout.addEventListener('click', async () => {
     const formData = new URLSearchParams();
 
-// Loop through the array and append each tuple
-carts.forEach((item, index) => {
-    formData.append(`items[${index}][product_id]`, item.product_id);
-    formData.append(`items[${index}][quantity]`, item.quantity);
+    // Append cart items to formData
+    carts.forEach((item, index) => {
+        formData.append(`items[${index}][product_id]`, item.product_id);
+        formData.append(`items[${index}][quantity]`, item.quantity);
+    });
+
+    try {
+        const response = await fetch('/send-data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: formData.toString()
+        });
+
+        const data = await response.json();
+
+        const options = {
+            key: "rzp_test_Z8YgAD9JbioskU", // Replace this with your actual Razorpay Key ID
+            amount: data.amount,         // Amount in paise
+            currency: data.currency,
+            name: "Your Company Name",
+            description: "Food Order Payment",
+            order_id: data.orderId,      // Razorpay Order ID from server
+            handler: function (paymentResponse) {
+                //alert("Payment Successful!");
+                //console.log(paymentResponse);
+                window.location.href="/home1";
+            },
+            theme: {
+                color: "#F37254"
+            }
+        };
+
+        const rzp = new Razorpay(options);
+        rzp.open();
+
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error placing order or initiating payment.');
+    }
 });
 
-fetch('/send-data', {
-    method: 'POST',
-    headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: formData.toString()
-})
-.then(response => response.json())
-.then(data => console.log(data))
-.catch(error => console.error('Error:', error));
-
-setTimeout(() => {
-    location.reload();
-}, 200);
-});
 
 iconCart.addEventListener('click',()=>{
     body.classList.toggle('showCart');

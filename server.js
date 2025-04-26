@@ -5,12 +5,13 @@ import { fileURLToPath } from "url";
 import pg from "pg";
 import nodemailer from "nodemailer";
 import notifier from "node-notifier";
+import Razorpay from "razorpay";
 
 const db = new pg.Client({
     user:"postgres",
     host:"localhost",
-    database:"service",
-    password:"Anshu98",
+    database:"postgres",
+    password:"851211",
     port:5432,
 });
 
@@ -18,16 +19,23 @@ const transporter = nodemailer.createTransport({
   service:'gmail',
   auth: {
     user:'bookinghitk@gmail.com',
-    pass:'wegl qpwn kcvp kynj'
+    pass:'feub bpde rkbc rfww'
   }
 });
 
+
+const razorpayInstance = new Razorpay({
+    key_id: 'rzp_test_Z8YgAD9JbioskU',
+    key_secret: 'j8we70w4W1mZXaYazKmcfaWI',
+
+});
+
 var email='';
-var password= 0 ;
+var password= 0;
 db.connect();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-const port = 3000;
+const port = 1900;
 app.use(express.json());
 app.use(express.static("public"));
 app.use(bodyParser.urlencoded({extended:true}));
@@ -75,7 +83,7 @@ app.post("/submit-login", async (req,res)=>{
                   }
                 });
                 if(flag==true && flag1==true){
-                 res.sendFile(__dirname+"/homepage.html");
+                 res.sendFile(__dirname+"/public/homepage.html");
                  notifier.notify({
                     title: 'My notification',
                     message: 'Successfully logged in!'
@@ -119,7 +127,7 @@ app.post("/submit-signup",async (req,res)=>{
         password =  req.body["password"];
         try {
             db.query("INSERT INTO userdata (email,password) VALUES ($1,$2)",[email,password]);
-            res.sendFile(__dirname+"/homepage.html");
+            res.sendFile(__dirname+"/public/homepage.html");
             notifier.notify({
                 title: 'My notification',
                 message: 'Successfully logged in!'
@@ -154,95 +162,121 @@ app.post("/submit-signup",async (req,res)=>{
 });
 
 app.get("/home1",(req,res)=>{
-    res.sendFile(__dirname+"/homepage.html");
+    res.sendFile(__dirname+"/public/homepage.html");
 });
 
 app.get("/menu",(req,res)=>{
-    res.sendFile(__dirname+"/menu.html");
+    res.sendFile(__dirname+"/public/menu.html");
 });
 
 app.post("/submit",(req,res)=>{
     var email = req.body["email_address"];
     console.log(email);
-    res.sendFile(__dirname+"/homepage.html");
+    res.sendFile(__dirname+"/public/homepage.html");
 });
 
 app.post('/send-data', async (req, res) => {
-  console.log(req.body); // This will show the entire body structure
-  const items = req.body.items; // Accessing the items array
-  notifier.notify({
-      title: 'My notification',
-      message: 'Order Placed!'
-  });
+    console.log(req.body);
+    const items = req.body.items;
 
-  // Check if items is an array
-  if (!items || !Array.isArray(items)) {
-      console.log('No items found in the body.');
-      return res.status(400).send('No items found in the request.');
-  }
+    if (!items || !Array.isArray(items)) {
+        console.log('No items found in the body.');
+        return res.status(400).send('No items found in the request.');
+    }
 
-  try {
-      // Process each item
-      for (const item of items) {
-          const productId = item.product_id;  // Accessing product_id
-          const quantity = item.quantity;      // Accessing quantity
+    try {
+        let totalAmount = 0;
+        for (const item of items) {
+            const productId = item.product_id;
+            const quantity = item.quantity;
+            const foodResult = await db.query("SELECT price FROM food WHERE product_id = $1", [productId]);
 
-          // Insert order into the database
-          const foodResult = await db.query("SELECT name, price FROM food WHERE product_id = $1", [productId]);
-          const { name, price } = foodResult.rows[0];
-          const query = 'INSERT INTO orders (product_id, quantity, email,status,fooditem) VALUES ($1, $2, $3, $4, $5) RETURNING id';
-          const values = [productId, quantity, email,'pending',name]; // Ensure 'email' is defined
-          const insertResult = await db.query(query, values); // Await the query execution
+            if (foodResult.rows.length === 0) {
+                console.log(`No food item found for product_id: ${productId}`);
+                continue;
+            }
 
-          // Fetch food details
-          if (foodResult.rows.length === 0) {
-              console.log(`No food item found for product_id: ${productId}`);
-              continue; // Skip this iteration if no food is found
-          }
-          console.log(`Order placed for ${quantity} ${name} of amount ${quantity * price} rupees.`);
+            const price = foodResult.rows[0].price;
+            totalAmount += quantity * price * 100; // amount in paise
+        }
 
-          // Send order confirmation email
-          const mailOptions = {
-              from: 'bookinghitk@gmail.com',
-              to: email,
-              subject: 'Your Order is Created',
-              text: `Thank you for your order! You have successfully placed an order of ${quantity} plate ${name} for ${quantity * price} rupees. Enjoy your meal!`
-          };
+        const options = {
+            amount: totalAmount,
+            currency: "INR",
+            receipt: "receipt_order_" + Date.now(),
+        };
 
-          try {
-              await transporter.sendMail(mailOptions);
-              console.log("Email sent successfully for order preparation.");
-          } catch (error) {
-              console.log('Error sending email:', error.message);
-          }
+        const order = await razorpayInstance.orders.create(options);
+        console.log("Razorpay Order:", order);
 
-          // Send prepared email after a delay
-          setTimeout(async () => {
-              const preparedMailOptions = {
-                  from: 'bookinghitk@gmail.com',
-                  to: email,
-                  subject: 'Your Order is Prepared',
-                  text: `Thank you for your order! Your order of ${quantity} plate ${name} has been prepared. Enjoy your meal!`
-              };
+        res.status(200).json({
+            orderId: order.id,
+            amount: order.amount,
+            currency: order.currency
+        });
 
-              try {
-                  await transporter.sendMail(preparedMailOptions);
-                  console.log("Email sent successfully for completion of order");
-                  db.query("UPDATE orders SET status=($1) WHERE product_id=($2)",["completed",productId]);
-              } catch (error) {
-                  console.log('Error sending email:', error.message);
-              }
-          }, 1 * 60 * 1000); // 5 minute delay
-      }
+        /*
+        notifier.notify({
+            title: 'My notification',
+            message: 'Order Placed!'
+        });
+        */
 
-      // Send a final response after processing all items
-      res.status(201).send('Data saved successfully!');
+        // Process each item (store in DB and send email)
+        for (const item of items) {
+            const productId = item.product_id;
+            const quantity = item.quantity;
+            const foodResult = await db.query("SELECT name, price FROM food WHERE product_id = $1", [productId]);
 
-  } catch (error) {
-      console.error("Error processing orders:", error);
-      res.status(500).send('Error processing orders.');
-  }
+            if (foodResult.rows.length === 0) {
+                console.log(`No food item found for product_id: ${productId}`);
+                continue;
+            }
+
+            const { name, price } = foodResult.rows[0];
+            const query = 'INSERT INTO orders (product_id, quantity, email, status, fooditem) VALUES ($1, $2, $3, $4, $5) RETURNING id';
+            const values = [productId, quantity, email, 'pending', name];
+            await db.query(query, values);
+
+            const mailOptions = {
+                from: 'bookinghitk@gmail.com',
+                to: email,
+                subject: 'Your Order is Created',
+                text: `Thank you for your order! You have successfully placed an order of ${quantity} plate(s) ${name} for ${quantity * price} rupees. Enjoy your meal!`
+            };
+
+            try {
+                await transporter.sendMail(mailOptions);
+                console.log("Email sent for order confirmation.");
+            } catch (error) {
+                console.log('Error sending email:', error.message);
+            }
+
+            // Prepare order status change after delay
+            setTimeout(async () => {
+                const preparedMailOptions = {
+                    from: 'bookinghitk@gmail.com',
+                    to: email,
+                    subject: 'Your Order is Prepared',
+                    text: `Your order of ${quantity} plate(s) ${name} has been prepared. Enjoy your meal!`
+                };
+
+                try {
+                    await transporter.sendMail(preparedMailOptions);
+                    console.log("Preparation email sent.");
+                    await db.query("UPDATE orders SET status=$1 WHERE product_id=$2", ["completed", productId]);
+                } catch (error) {
+                    console.log('Error sending preparation email:', error.message);
+                }
+            }, 1 * 60 * 1000); // 1 minute delay
+        }
+
+    } catch (error) {
+        console.error("Error creating Razorpay order or processing items:", error);
+        if (!res.headersSent) res.status(500).send('Error creating payment order or processing items.');
+    }
 });
+
 
 app.get("/contact",(req,res)=>{
     res.sendFile(__dirname+"/public/contact.html");
@@ -257,7 +291,7 @@ app.post("/contact",(req,res)=>{
         title: 'My notification',
         message: 'Sent Successfully!'
       }); 
-      res.sendFile(__dirname+"/homepage.html");
+      res.sendFile(__dirname+"/public/homepage.html");
 });
 
 app.listen(port,()=>{
