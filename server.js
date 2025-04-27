@@ -9,9 +9,9 @@ import Razorpay from "razorpay";
 
 const db = new pg.Client({
     user:"postgres",
-    host:"localhost",
-    database:"postgres",
-    password:"851211",
+    host:"my-database.cfy0wmwoyx98.eu-north-1.rds.amazonaws.com",
+    database:"onlinefood",
+    password:"Rastogi80496",
     port:5432,
 });
 
