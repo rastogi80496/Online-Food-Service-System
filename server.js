@@ -283,7 +283,7 @@ app.get("/contact",(req,res)=>{
     res.sendFile(__dirname+"/public/contact.html");
 });
 
-app.post("/contact",(req,res)=>{
+app.post("/contact", async (req,res)=>{
     const { name , email , message } = req.body;
     console.log("Name:",name);
     console.log("Email:",email); 
@@ -291,7 +291,21 @@ app.post("/contact",(req,res)=>{
     notifier.notify({
         title: 'My notification',
         message: 'Sent Successfully!'
-      }); 
+      });
+      
+      const mailOptions = {
+        from: email,
+        to: 'bookinghitk@gmail.com',
+        subject: 'Message',
+        text: `${name} have a message for you : ${message}`
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log("Email sent for order confirmation.");
+    } catch (error) {
+        console.log('Error sending email:', error.message);
+    } 
       res.sendFile(__dirname+"/public/homepage.html");
 });
 
