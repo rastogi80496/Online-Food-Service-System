@@ -13,6 +13,7 @@ const db = new pg.Client({
     database:"onlinefood",
     password:"Rastogi80496",
     port:5432,
+    ssl: { rejectUnauthorized: false }
 });
 
 const transporter = nodemailer.createTransport({
